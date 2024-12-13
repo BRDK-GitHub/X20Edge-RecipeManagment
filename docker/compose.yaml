@@ -1,0 +1,32 @@
+services:
+  RecipeManagment:
+    image: piekutt/webserver
+    ports:
+      - "8070:80"
+    networks:
+      - front-tier
+      - back-tier
+    platform: linux/arm64 # Specify platform explicitly
+
+  Pocketbase:
+    image: manchtools/open-ticket-pocketbase
+    ports:
+      - "8090:8090"
+    networks:
+      - back-tier
+    environment:
+      - PRIVATE_POCKETBASE_PASSWORD=1234567890
+      - PRIVATE_POCKETBASE_ADMIN=test@test.com
+    platform: linux/arm64 # Specify platform explicitly
+
+  OPC-UA_Server:
+    image: piekutt/opc-ua
+    ports:
+      - 5000:5000
+    networks:
+      - back-tier
+    platform: linux/arm64 
+
+networks:
+  front-tier: {}
+  back-tier: {}

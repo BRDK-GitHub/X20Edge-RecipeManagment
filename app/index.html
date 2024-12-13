@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recipe Managment</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px 50px 20px 50px;
+            background-color: #f8f9fa;
+            color: #333;
+        }
+
+        h1 {
+            color: #ff8800;
+        }
+
+        button {
+            margin: 5px;
+            padding: 10px 20px;
+            font-size: 16px;
+            color: #fff;
+            background-color: #ff8800;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #c96b00;
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 10px 0;
+            padding: 10px;
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+
+        li:hover {
+            background-color: #ff880093;
+            transform: scale(1.02);
+        }
+
+        li.selected {
+            background-color: #ff880093;
+            
+        }
+
+        .buttons {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Recipe Managment Server</h1>
+    <button id="refreshButton">Refresh</button>
+    <ul id="recipeList"></ul>
+    <button id="deleteButton" disabled>Delete Selected Recipe</button>
+    <button id="loadButton" disabled>Load Selected Recipe</button>
+    <button id="createButton">Create Recipe</button>
+    
+
+    <script type="module">
+        import PocketBase from 'https://cdn.jsdelivr.net/npm/pocketbase@0.22.1/dist/pocketbase.es.mjs';
+
+        // Dynamically get the local IP address
+        const localIp = location.hostname || 'localhost';
+        const pb = new PocketBase(`http://${localIp}:8090`); // Use the local IP address
+
+        const loadButton = document.getElementById('loadButton');
+        const refreshButton = document.getElementById('refreshButton');
+        const deleteButton = document.getElementById('deleteButton');
+        const recipeList = document.getElementById('recipeList');
+        const createButton = document.getElementById('createButton')
+
+        let selectedRecipeId = null;
+
+        // Function to load recipes and render the list
+        async function loadRecipes() {
+            try {
+                recipeList.innerHTML = '<li>Loading...</li>';
+                const recipes = await pb.collection('Recipe').getFullList({
+                    sort: 'name',
+                });
+                selectedRecipeId = null;
+                deleteButton.disabled = true; // Disable delete button
+                loadButton.disabled = true;
+                renderList(recipes);
+            } catch (err) {
+                console.error('Error loading recipes:', err);
+                recipeList.innerHTML = '<li>Error loading recipes.</li>';
+            }
+        }
+
+        // Function to render the recipe list
+        function renderList(recipes) {
+            recipeList.innerHTML = '';
+            recipes.forEach(recipe => {
+                const li = document.createElement('li');
+                li.textContent = `${recipe.name}`;
+                li.dataset.id = recipe.id;
+
+                li.style.cursor = 'pointer';
+                li.style.padding = '5px';
+                li.style.border = '1px solid #ccc';
+                li.style.borderRadius = '5px';
+
+                // Highlight selection
+                li.addEventListener('click', () => {
+                    const previouslySelected = document.querySelector('.selected');
+                    if (previouslySelected) {
+                        previouslySelected.classList.remove('selected');
+                        previouslySelected.style.backgroundColor = '';
+                    }
+
+                    li.classList.add('selected');
+                    //li.style = li.selected;
+                    selectedRecipeId = recipe.id;
+
+                    deleteButton.disabled = false; // Enable delete button
+                    loadButton.disabled = false;
+                });
+
+                recipeList.appendChild(li);
+            });
+        }
+
+        // Function to delete the selected recipe
+        async function deleteSelectedRecipe() {
+            if (!selectedRecipeId) {
+                alert('Please select a recipe to delete.');
+                return;
+            }
+
+            try {
+                await pb.collection('Recipe').delete(selectedRecipeId); // Replace 'Recipe' with your collection name
+                alert('Recipe deleted!');
+                selectedRecipeId = null; // Reset the selected recipe
+                deleteButton.disabled = true; // Disable delete button
+                loadRecipes(); // Refresh the list
+            } catch (err) {
+                console.error('Error deleting recipe:', err);
+                alert('Failed to delete recipe.');
+            }
+        }
+
+        async function loadSelectedRecipe() {
+            if (!selectedRecipeId) {
+                alert('Please select a recipe to load.');
+                return;
+            }
+
+            try {
+                const record = await pb.collection('Recipe').getOne(selectedRecipeId, {
+                expand: 'relField1,relField2.subRelField',
+                });
+                // console.log(record.recipe); // send via OPC-UA method to PLC. Currently in JSON format
+                const localIp = location.hostname || 'localhost';
+                fetch(`http://${localIp}:5000/call_function`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(record)
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok ' + response.statusText);
+                    }
+                    return response.json();
+                })
+                .then(record => {
+                    console.log('Response from Flask:', record.result);
+                })
+                .catch(error => {
+                    console.error('There was a problem with the fetch operation:', error);
+                });
+                alert('Name: ' + record.recipe.name + ' Heat: ' + record.recipe.heat + ' Position: ' + record.recipe.position);
+            }
+            catch (err) {
+                console.error('Error loading recipe:', err);
+                alert('Failed to load recipe.');
+            }
+        }
+
+        async function createRecipe() {
+            const recipeName = 'Test' + Math.floor(Math.random() * 100)
+            const data = {
+            "name": recipeName,
+            "recipe": {
+                name: recipeName,
+                position: Math.floor(Math.random() * 100),
+                heat: false
+            }
+            };
+            const record = await pb.collection('Recipe').create(data);
+            loadRecipes(); // Refresh the list
+        }
+
+        // Event listeners
+        loadButton.addEventListener('click', loadSelectedRecipe);
+        refreshButton.addEventListener('click', loadRecipes);
+        deleteButton.addEventListener('click', deleteSelectedRecipe);
+        createButton.addEventListener('click', createRecipe);
+
+        // Initial load
+        loadRecipes();
+    </script>
+</body>
+</html>
