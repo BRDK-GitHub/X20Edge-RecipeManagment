@@ -1,6 +1,46 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from opcua import Client, ua
+import os
 
+
+# -------------------------------- OPC-UA -----------------------------------------------------
+# Define the OPC UA server URL
+ip = os.getenv('PLC_IP')
+url = "opc.tcp://"+ ip + ":4840"
+
+# Create a client instance
+client = Client(url)
+def writeOPCValue(valueName, newValue):
+    try:
+        # Connect to the server
+        client.connect()
+        print("Connected to OPC UA Server")
+
+        # Read a variable node (replace 'ns=2;i=2' with your node id)
+        node = client.get_node("ns=6;s=::" + valueName)
+        value = node.get_value()
+        print(f"Current value of the node: {value}")
+
+        # Read the data type of the node
+        dataType = node.get_data_type_as_variant_type()
+        print(f"Data type of the node: {dataType}")
+
+        # Write a new value to the node (replace 'new_value' with the value you want to write)
+        variantValue = ua.Variant(newValue, dataType)
+        node.set_data_value(ua.DataValue(variantValue))
+        print(f"New SINT value written to the node: {newValue}")
+
+        # Verify the new value
+        updatedValue = node.get_value()
+        print(f"Updated value of the node: {updatedValue}")
+
+    finally:
+        # Disconnect from the server
+        client.disconnect()
+        print("Disconnected from OPC UA Server")
+
+# ---------------------------------- Flask -----------------------------------------------------
 app = Flask(__name__)
 CORS(app)
 
@@ -32,6 +72,7 @@ def json_to_2d_array(json_data):
                 array.append([key, sub_key, sub_value])
         else:
             array.append([key, value])
+            writeOPCValue("Main:recipe." + key, value)
     print(array, flush=True)
     return array
 

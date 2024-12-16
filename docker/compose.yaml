@@ -25,10 +25,13 @@ services:
   OPC-UA_Server:
     image: piekutt/opc-ua
     ports:
-      - 5000:5000
+      - "5000:5000"
+      - "4840:4840"
     networks:
       - back-tier
-    platform: linux/arm64 
+    environment:
+      - PLC_IP=192.168.1.200
+    platform: linux/arm64
 
 networks:
   front-tier: {}
